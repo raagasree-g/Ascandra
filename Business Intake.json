@@ -1,0 +1,217 @@
+{
+  "name": "Business Intake",
+  "nodes": [
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        224,
+        0
+      ],
+      "id": "12ca0d3a-dec7-4569-857f-82538258d164",
+      "name": "User Chat Input",
+      "webhookId": "b5503a6b-9a36-4125-a080-2d82ed2b8a25"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are the Business Intake component of the Rural Venture Decision Navigator.\n\nThe entrepreneur's message is provided below.\n\nENTREPRENEUR MESSAGE:\n{{ $json.chatInput }}\n\nYour task is to extract only the business information explicitly stated by the entrepreneur.\n\nThe entrepreneur may communicate in English, Hindi, Kannada, or a mixture of these languages.\n\nExtract the following information when explicitly provided:\n\n- Business type\n- Product or products\n- Purchase cost per unit\n- Selling price per unit\n- Sales volume\n- Supplier credit period or supplier payment timing\n- Customer payment timing\n- Cash versus credit sales pattern\n- Business location, if explicitly provided\n- Any other directly stated financial or credit information\n\nRules:\n\n1. Never invent missing information.\n2. Never guess a number.\n3. Never convert an approximate value into an exact value.\n4. Preserve ranges when the entrepreneur gives a range.\n5. Clearly distinguish facts supplied by the entrepreneur from assumptions.\n6. Do not introduce external information.\n7. Do not calculate profit, margin, revenue, cash flow, or risk.\n8. Do not provide business advice.\n9. If information is ambiguous, identify it as unclear.\n10. Identify which required information is still missing.\n11. Ask only for information needed to continue the analysis.\n12. Do not use emojis or icon characters.\n13. Do not use em dashes.\n14. Use simple arrows such as -> when showing cause and effect.\n\nRequired information for completing intake:\n\n- Product or products\n- Purchase cost per unit\n- Selling price per unit\n- Expected or typical sales volume\n- Supplier payment timing\n- Customer payment timing\n\nReturn your response as valid JSON with these fields:\n\nfacts_supplied_by_entrepreneur\nverified_information\nassumptions\ncalculations\nmissing_information\nclarification_questions\nintake_complete\nresponse_to_entrepreneur\n\nFor verified_information, use an empty list because this stage does not perform external verification.\n\nFor assumptions, use an empty list unless an assumption is explicitly required. Missing information must remain missing, not become an assumption.\n\nFor calculations, use an empty list.\n\nSet intake_complete to true only when all required information has been supplied clearly enough for the next stage.\n\nWhen intake_complete is false, response_to_entrepreneur must ask the entrepreneur for the missing information.\n\nWhen intake_complete is true, response_to_entrepreneur must confirm the collected information and provide a section titled:\n\nFacts Supplied by Entrepreneur\n\nDo not add recommendations or conclusions.",
+        "messages": {
+          "messageValues": []
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        432,
+        0
+      ],
+      "id": "c74134aa-7dab-4cb5-98f9-0f99a3160647",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        368,
+        208
+      ],
+      "id": "7a8bdfb8-d466-406f-b45d-96574e1589a5",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "duI5dalYzTF1LnWn",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $input.first().json.text;\n\nif (!output) {\n  throw new Error(\"No LLM output found in the 'text' field.\");\n}\n\nlet cleaned = output.trim();\n\n// Remove Markdown code fences if Gemini adds them\ncleaned = cleaned.replace(/^```json\\s*/i, \"\");\ncleaned = cleaned.replace(/^```\\s*/i, \"\");\ncleaned = cleaned.replace(/\\s*```$/i, \"\");\n\nlet parsed;\n\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (error) {\n  throw new Error(\n    \"Gemini returned invalid JSON. Raw output: \" + output\n  );\n}\n\nreturn [\n  {\n    json: parsed\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        784,
+        0
+      ],
+      "id": "8a81e438-2907-4617-b8ca-bd14a40941f6",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "06912734-5a69-4d89-b902-d3295a6fe758",
+              "leftValue": "={{ $json.intake_complete }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        992,
+        0
+      ],
+      "id": "00481278-0d37-4bba-a50c-4cb3b25b3d4d",
+      "name": "Check Intake Complete"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ad2f21cd-efc1-48a6-9d6b-e2ec0dba2a1f",
+              "name": "text",
+              "value": "={{ $json.response_to_entrepreneur }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1200,
+        96
+      ],
+      "id": "8dd893b1-908b-48c4-9f6e-15edf62c52f2",
+      "name": "Prepare Clarification Response"
+    },
+    {
+      "parameters": {
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1200,
+        -96
+      ],
+      "id": "86a1ba3c-49fc-43f9-9139-e9727ac7adda",
+      "name": "Prepare Completed Intake"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "User Chat Input": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Check Intake Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Intake Complete": {
+      "main": [
+        [
+          {
+            "node": "Prepare Completed Intake",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Clarification Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "8f4484f6-7ef6-46c0-9d4a-8a5c4c5c8db9",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7a95708e274691b9571e5f9b5bb25f4236d71ea39a703c7c591bc8e4819cb652"
+  },
+  "id": "SECn0KvkwvAmIBiK",
+  "tags": []
+}

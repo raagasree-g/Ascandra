@@ -1,0 +1,273 @@
+{
+  "name": "Credit Tracker",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "c8b9f9b4-f9f9-47fe-b522-d14920063621",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "32efd23b-dbab-4adc-b7b7-7e3f12f71185",
+              "name": "intake_data",
+              "value": "{   \"product\": \"Sarees\",   \"purchase_cost_per_unit\": 700,   \"selling_price_per_unit\": 1000,   \"monthly_sales_volume\": 50,   \"supplier_credit_days\": 30,   \"customer_payment_terms\": \"50% of customers pay after 20 days, payment timing for the remaining 50% is not confirmed\",   \"supplier_amount_owed\": \"Not explicitly stated\",   \"customer_amount_due\": \"Not explicitly stated\" }",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        208,
+        0
+      ],
+      "id": "b57c7f79-d1e0-4b43-988c-0c898f50a451",
+      "name": "Prepare Credit Input"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are the Credit Tracker component of the Rural Venture Decision Navigator.\n\nYour task is to extract every credit obligation mentioned in the supplied business intake data.\n\nThe system must strictly distinguish:\n1. Facts stated by the entrepreneur\n2. System assumptions, always labeled \"assumed, not confirmed\"\n3. System calculations\n\nDo not invent amounts, dates, payment terms, customers, suppliers, or other financial facts.\n\nIdentify both sides of informal credit:\n\nSupplier obligations:\n- Money the entrepreneur owes suppliers\n- Supplier credit period\n- Supplier payment deadline, if explicitly provided\n- Amount owed, if explicitly provided or directly calculable from supplied facts\n\nCustomer receivables:\n- Money customers owe the entrepreneur\n- Customer payment terms\n- Expected collection timing\n- Amount receivable, if explicitly provided or directly calculable\n\nFor every obligation, classify the information as fact, assumption, or calculation.\n\nIf an exact due date is not supplied, do not invent a calendar date. State the timing in days only if the entrepreneur supplied it.\n\nIf an amount can be calculated directly from supplied numbers, place that result under calculations and show the calculation basis.\n\nReturn ONLY valid JSON with this exact structure:\n\n{\n  \"supplier_obligations\": [],\n  \"customer_receivables\": [],\n  \"assumptions\": [],\n  \"calculations\": [],\n  \"missing_information\": [],\n  \"credit_summary\": \"\"\n}\n\nEach supplier obligation should contain:\n{\n  \"party\": \"\",\n  \"type\": \"supplier_obligation\",\n  \"amount\": null,\n  \"currency\": \"INR\",\n  \"credit_days\": null,\n  \"due_date\": null,\n  \"timing_status\": \"\",\n  \"information_status\": \"FACT\"\n}\n\nEach customer receivable should contain:\n{\n  \"party\": \"\",\n  \"type\": \"customer_receivable\",\n  \"amount\": null,\n  \"currency\": \"INR\",\n  \"credit_days\": null,\n  \"expected_collection_date\": null,\n  \"timing_status\": \"\",\n  \"information_status\": \"FACT\"\n}\n\nUse null when a value was not supplied.\n\nDo not use markdown.\nDo not use emoji or icon characters.\nDo not use em dashes.\n\nBusiness intake data:\n\n{{ $json.intake_data }}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        416,
+        0
+      ],
+      "id": "9e013be2-eb44-4901-a032-4ca4740db1f0",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        352,
+        208
+      ],
+      "id": "c5def5b6-9c79-430d-b39d-870d3646015e",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "duI5dalYzTF1LnWn",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\nreturn items.map(item => {\n  const output = item.json.text;\n\n  if (!output) {\n    throw new Error(\"Gemini did not return any text output.\");\n  }\n\n  let cleaned = output.trim();\n\n  // Remove markdown code fences if Gemini adds them\n  cleaned = cleaned.replace(/^```json\\s*/i, \"\");\n  cleaned = cleaned.replace(/^```\\s*/i, \"\");\n  cleaned = cleaned.replace(/\\s*```$/i, \"\");\n\n  let parsed;\n\n  try {\n    parsed = JSON.parse(cleaned);\n  } catch (error) {\n    throw new Error(\n      \"Gemini returned invalid JSON. Raw output: \" + output\n    );\n  }\n\n  return {\n    json: parsed\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        768,
+        0
+      ],
+      "id": "913488cc-c196-4d82-a512-51f72533e8c9",
+      "name": "Parse Credit Data"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\nconst supplierObligations = input.supplier_obligations || [];\nconst customerReceivables = input.customer_receivables || [];\n\nconst today = new Date();\ntoday.setHours(0, 0, 0, 0);\n\nfunction calculateDaysUntil(dateString) {\n  if (!dateString) return null;\n\n  const date = new Date(dateString);\n  if (isNaN(date.getTime())) return null;\n\n  date.setHours(0, 0, 0, 0);\n\n  return Math.ceil(\n    (date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)\n  );\n}\n\nconst suppliers = supplierObligations.map(item => {\n  const daysUntilDue = item.due_date\n    ? calculateDaysUntil(item.due_date)\n    : item.credit_days ?? null;\n\n  return {\n    ...item,\n    days_until_due: daysUntilDue,\n    timing_basis: item.due_date\n      ? \"calculated from supplied due date\"\n      : \"relative credit period supplied, exact due date not confirmed\"\n  };\n});\n\nconst customers = customerReceivables.map(item => {\n  const daysUntilCollection = item.expected_collection_date\n    ? calculateDaysUntil(item.expected_collection_date)\n    : item.credit_days ?? null;\n\n  return {\n    ...item,\n    days_until_collection: daysUntilCollection,\n    timing_basis: item.expected_collection_date\n      ? \"calculated from supplied collection date\"\n      : \"relative customer payment period supplied, exact collection date not confirmed\"\n  };\n});\n\nconst totalSupplierAmount = suppliers.reduce(\n  (sum, item) => sum + (Number(item.amount) || 0),\n  0\n);\n\nconst totalCustomerReceivable = customers.reduce(\n  (sum, item) => sum + (Number(item.amount) || 0),\n  0\n);\n\nconst earliestSupplierDue = suppliers\n  .map(item => item.days_until_due)\n  .filter(value => value !== null)\n  .sort((a, b) => a - b)[0] ?? null;\n\nconst earliestCustomerCollection = customers\n  .map(item => item.days_until_collection)\n  .filter(value => value !== null)\n  .sort((a, b) => a - b)[0] ?? null;\n\nconst timingGap =\n  earliestSupplierDue !== null &&\n  earliestCustomerCollection !== null\n    ? earliestCustomerCollection - earliestSupplierDue\n    : null;\n\nlet timingStatus = \"CANNOT DETERMINE\";\n\nif (timingGap !== null) {\n  if (timingGap < 0) {\n    timingStatus = \"CUSTOMER COLLECTION EXPECTED BEFORE SUPPLIER PAYMENT\";\n  } else if (timingGap === 0) {\n    timingStatus = \"SAME-DAY TIMING\";\n  } else {\n    timingStatus = \"SUPPLIER PAYMENT DUE BEFORE CUSTOMER COLLECTION\";\n  }\n}\n\nreturn [\n  {\n    json: {\n      ...input,\n\n      timing_analysis: {\n        analysis_date: today.toISOString().split(\"T\")[0],\n\n        supplier_obligations: suppliers,\n\n        customer_receivables: customers,\n\n        total_supplier_amount: totalSupplierAmount,\n\n        total_customer_receivable: totalCustomerReceivable,\n\n        earliest_supplier_due_days: earliestSupplierDue,\n\n        earliest_customer_collection_days: earliestCustomerCollection,\n\n        timing_gap_days: timingGap,\n\n        timing_status: timingStatus\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        0
+      ],
+      "id": "21914cd8-86ff-4abf-8044-d587aad1a302",
+      "name": "Calculate Credit Timing"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a financial risk analyst for a small business.\n\nAnalyze the following supplier obligations, customer receivables, payment timing, and cash-flow information.\n\n{{ JSON.stringify($json) }}\n\nDetermine:\n\n1. Overall credit risk: LOW, MEDIUM, HIGH, or UNKNOWN\n2. Cash-flow risk\n3. Supplier payment risk\n4. Customer collection risk\n5. Whether the business has a timing mismatch\n6. The main financial risk\n7. Recommended action\n8. What additional information is still required\n\nRules:\n- Do not invent missing information.\n- Clearly distinguish verified facts from assumptions.\n- If customer payment timing is unknown, treat that uncertainty as a risk factor.\n- Do not approve or reject credit solely from incomplete information.\n- Give a concise but financially meaningful assessment.\n\nReturn valid JSON only in this structure:\n\n{\n  \"overall_credit_risk\": \"\",\n  \"cash_flow_risk\": \"\",\n  \"supplier_payment_risk\": \"\",\n  \"customer_collection_risk\": \"\",\n  \"timing_mismatch\": \"\",\n  \"main_risk\": \"\",\n  \"recommended_action\": \"\",\n  \"additional_information_required\": []\n}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1392,
+        0
+      ],
+      "id": "be7ad8b5-c8b9-40d9-8506-a4686f6df6bf",
+      "name": "Basic LLM Chain1"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        208
+      ],
+      "id": "29aa8e4b-faa1-4ebc-b8d2-7d5f1de9f5f3",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "duI5dalYzTF1LnWn",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\nlet output = input.text;\n\nif (typeof output !== \"string\") {\n  output = JSON.stringify(output);\n}\n\nlet cleaned = output.trim();\n\n// Remove markdown code fences if Gemini adds them\ncleaned = cleaned.replace(/^```json\\s*/i, \"\");\ncleaned = cleaned.replace(/^```\\s*/i, \"\");\ncleaned = cleaned.replace(/\\s*```$/i, \"\");\n\nlet parsed;\n\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (error) {\n  throw new Error(\n    \"Gemini returned invalid JSON. Raw output: \" + output\n  );\n}\n\nreturn [\n  {\n    json: parsed\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1744,
+        0
+      ],
+      "id": "78e85c76-d41d-4d48-b5fe-167bae8081f7",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\n\nconst supplierObligations = data.timing_analysis?.supplier_obligations\n  || data.supplier_obligations\n  || [];\n\nconst customerReceivables = data.timing_analysis?.customer_receivables\n  || data.customer_receivables\n  || [];\n\nconst supplierAmount = supplierObligations.reduce(\n  (sum, item) => sum + (Number(item.amount) || 0),\n  0\n);\n\nconst customerAmount = customerReceivables.reduce(\n  (sum, item) => sum + (Number(item.amount) || 0),\n  0\n);\n\nconst knownCustomerAmount = customerReceivables\n  .filter(item => item.credit_days !== null)\n  .reduce(\n    (sum, item) => sum + (Number(item.amount) || 0),\n    0\n  );\n\nconst unknownCustomerAmount = customerReceivables\n  .filter(item => item.credit_days === null)\n  .reduce(\n    (sum, item) => sum + (Number(item.amount) || 0),\n    0\n  );\n\nconst earliestSupplierDue =\n  data.timing_analysis?.earliest_supplier_due_days\n  ?? supplierObligations\n    .map(item => item.credit_days)\n    .filter(v => v !== null)\n    .sort((a, b) => a - b)[0]\n  ?? null;\n\nconst earliestCustomerCollection =\n  data.timing_analysis?.earliest_customer_collection_days\n  ?? customerReceivables\n    .map(item => item.credit_days)\n    .filter(v => v !== null)\n    .sort((a, b) => a - b)[0]\n  ?? null;\n\nlet knownTimingGap = null;\n\nif (\n  earliestSupplierDue !== null &&\n  earliestCustomerCollection !== null\n) {\n  knownTimingGap =\n    earliestCustomerCollection - earliestSupplierDue;\n}\n\nlet riskLevel = \"UNKNOWN\";\n\nif (knownTimingGap !== null) {\n  if (knownTimingGap < 0) {\n    riskLevel = \"LOW\";\n  } else if (knownTimingGap === 0) {\n    riskLevel = \"MEDIUM\";\n  } else {\n    riskLevel = \"HIGH\";\n  }\n}\n\nreturn [\n  {\n    json: {\n      ...data,\n\n      cash_flow_analysis: {\n        total_supplier_obligations: supplierAmount,\n        total_customer_receivables: customerAmount,\n        known_customer_receivables: knownCustomerAmount,\n        unknown_customer_receivables: unknownCustomerAmount,\n\n        known_timing_gap_days: knownTimingGap,\n\n        timing_risk: riskLevel,\n\n        cash_flow_observation:\n          unknownCustomerAmount > 0\n            ? `₹${unknownCustomerAmount} of customer receivables have unconfirmed payment timing.`\n            : \"All customer payment timing is known.\"\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1184,
+        0
+      ],
+      "id": "ae2346c7-0b16-490a-b3df-d4bcdf640c8e",
+      "name": "Calculate Cash Flow Gap"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Prepare Credit Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Credit Input": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Parse Credit Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Credit Data": {
+      "main": [
+        [
+          {
+            "node": "Calculate Credit Timing",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Credit Timing": {
+      "main": [
+        [
+          {
+            "node": "Calculate Cash Flow Gap",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Cash Flow Gap": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "a33cbc78-61ae-4273-b42a-41436bbcebc7",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7a95708e274691b9571e5f9b5bb25f4236d71ea39a703c7c591bc8e4819cb652"
+  },
+  "id": "sHsgzg2LCCnoWzKJ",
+  "tags": []
+}
