@@ -1,0 +1,379 @@
+{
+  "name": "Cash Flow Engine",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "4cac3283-3131-4377-aefd-9af4bcd0b565",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "61900a8b-3b50-4b43-9d81-43cf3bb8e0e8",
+              "name": "cash_flow_input",
+              "value": "={{ $json }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        192,
+        0
+      ],
+      "id": "dc5327ac-9f53-44fa-b8b5-1bff91eb380a",
+      "name": "Prepare Cash Flow Input"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json.cash_flow_input || {};\n\nconst sellingPrice = Number(\n  input.selling_price ??\n  input.selling_price_per_unit ??\n  0\n);\n\nconst monthlySalesVolume = Number(\n  input.monthly_sales_volume ??\n  input.monthly_sales ??\n  input.sales_volume ??\n  0\n);\n\nconst monthlyRevenue = sellingPrice * monthlySalesVolume;\n\nreturn [\n  {\n    json: {\n      ...$json,\n      revenue_analysis: {\n        selling_price_per_unit: sellingPrice,\n        monthly_sales_volume: monthlySalesVolume,\n        monthly_revenue: monthlyRevenue,\n        revenue_status:\n          monthlyRevenue > 0\n            ? \"CALCULATED\"\n            : \"INSUFFICIENT_INFORMATION\"\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        0
+      ],
+      "id": "6acec186-c846-4bc4-bcc1-60981d6bcfb3",
+      "name": "Calculate revenue"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json.cash_flow_input || {};\n\nconst purchaseCost = Number(\n  input.purchase_cost ??\n  input.purchase_cost_per_unit ??\n  input.cost_per_unit ??\n  0\n);\n\nconst monthlySalesVolume = Number(\n  input.monthly_sales_volume ??\n  input.monthly_sales ??\n  input.sales_volume ??\n  0\n);\n\nconst monthlyCOGS = purchaseCost * monthlySalesVolume;\n\nreturn [\n  {\n    json: {\n      ...$json,\n      cogs_analysis: {\n        purchase_cost_per_unit: purchaseCost,\n        monthly_sales_volume: monthlySalesVolume,\n        monthly_cogs: monthlyCOGS,\n        cogs_status:\n          monthlyCOGS > 0\n            ? \"CALCULATED\"\n            : \"INSUFFICIENT_INFORMATION\"\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        0
+      ],
+      "id": "b7ef413a-20f7-4db3-b430-a24fe47795f4",
+      "name": "Calculate Cost of Goods Sold"
+    },
+    {
+      "parameters": {
+        "jsCode": "const revenue = Number(\n  $json.revenue_analysis?.monthly_revenue ?? 0\n);\n\nconst cogs = Number(\n  $json.cogs_analysis?.monthly_cogs ?? 0\n);\n\nconst grossProfit = revenue - cogs;\n\nconst grossMargin =\n  revenue > 0\n    ? (grossProfit / revenue) * 100\n    : null;\n\nreturn [\n  {\n    json: {\n      ...$json,\n      gross_profit_analysis: {\n        monthly_revenue: revenue,\n        monthly_cogs: cogs,\n        monthly_gross_profit: grossProfit,\n        gross_margin_percent: grossMargin,\n        status:\n          revenue > 0 && cogs >= 0\n            ? \"CALCULATED\"\n            : \"INSUFFICIENT_INFORMATION\"\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        816,
+        0
+      ],
+      "id": "e5abbc78-b287-4c4d-9be3-f05f4989d001",
+      "name": "Calculate Gross Profit"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json.cash_flow_input || {};\n\nconst operatingExpenses =\n  Number(input.monthly_operating_expenses ?? 0);\n\nconst grossProfit =\n  Number($json.gross_profit_analysis?.monthly_gross_profit ?? 0);\n\nconst operatingProfit =\n  grossProfit - operatingExpenses;\n\nreturn [\n  {\n    json: {\n      ...$json,\n\n      operating_expense_analysis: {\n        monthly_operating_expenses: operatingExpenses,\n\n        monthly_gross_profit: grossProfit,\n\n        monthly_operating_profit: operatingProfit,\n\n        status:\n          operatingExpenses > 0\n            ? \"CALCULATED\"\n            : \"INSUFFICIENT_INFORMATION\"\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1024,
+        0
+      ],
+      "id": "5834d45f-5c86-4778-8e5f-6a0e6dd5faa5",
+      "name": "Calculate Operating Expenses"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json.cash_flow_input || {};\n\nconst operatingProfit =\n  Number($json.operating_expense_analysis?.monthly_operating_profit ?? 0);\n\nconst debtPayments =\n  Number(input.monthly_debt_payments ?? 0);\n\nconst otherCashOutflows =\n  Number(input.monthly_other_cash_outflows ?? 0);\n\nconst netCashFlow =\n  operatingProfit - debtPayments - otherCashOutflows;\n\nreturn [\n  {\n    json: {\n      ...$json,\n\n      net_cash_flow_analysis: {\n        monthly_operating_profit: operatingProfit,\n        monthly_debt_payments: debtPayments,\n        monthly_other_cash_outflows: otherCashOutflows,\n        monthly_net_cash_flow: netCashFlow,\n\n        cash_flow_status:\n          netCashFlow > 0\n            ? \"POSITIVE\"\n            : netCashFlow < 0\n              ? \"NEGATIVE\"\n              : \"INSUFFICIENT_INFORMATION\"\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1232,
+        0
+      ],
+      "id": "33599b0e-3c2c-43ba-b9ba-5509474933f0",
+      "name": "Calculate Net Cash Flow"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $json.cash_flow_input || {};\n\nconst currentCashBalance =\n  Number(input.current_cash_balance ?? 0);\n\nconst monthlyNetCashFlow =\n  Number($json.net_cash_flow_analysis?.monthly_net_cash_flow ?? 0);\n\nlet runwayMonths = null;\nlet runwayStatus = \"INSUFFICIENT_INFORMATION\";\n\nif (currentCashBalance > 0 && monthlyNetCashFlow < 0) {\n  runwayMonths = currentCashBalance / Math.abs(monthlyNetCashFlow);\n  runwayStatus = \"CALCULATED\";\n} else if (monthlyNetCashFlow >= 0) {\n  runwayStatus = \"NO_BURN\";\n}\n\nreturn [\n  {\n    json: {\n      ...$json,\n\n      cash_runway_analysis: {\n        current_cash_balance: currentCashBalance,\n        monthly_net_cash_flow: monthlyNetCashFlow,\n        estimated_runway_months: runwayMonths,\n        runway_status: runwayStatus\n      }\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1440,
+        0
+      ],
+      "id": "b4012f8f-92c3-462b-bd85-0366b22b9370",
+      "name": "Calculate Cash Runway"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "You are a financial risk analyst for a small business.\n\nAnalyze the cash-flow data provided below.\n\nSome fields may be missing, null, empty, or unconfirmed. Treat these as missing information. Do not assume that missing values are zero.\n\nIdentify:\n1. Overall cash-flow risk\n2. Liquidity risk\n3. Revenue risk\n4. Cost risk\n5. Cash runway risk\n6. The most important financial problem\n7. Recommended actions\n8. Additional information required\n\nRules:\n- Never treat missing values as zero.\n- Do not invent financial data.\n- Clearly distinguish calculated values from missing information.\n- If information is insufficient, say so.\n- Give practical recommendations suitable for a small business.\n- Return ONLY valid JSON.\n\nRequired JSON structure:\n\n{\n  \"overall_cash_flow_risk\": \"LOW | MEDIUM | HIGH | INSUFFICIENT_INFORMATION\",\n  \"liquidity_risk\": \"LOW | MEDIUM | HIGH | INSUFFICIENT_INFORMATION\",\n  \"revenue_risk\": \"LOW | MEDIUM | HIGH | INSUFFICIENT_INFORMATION\",\n  \"cost_risk\": \"LOW | MEDIUM | HIGH | INSUFFICIENT_INFORMATION\",\n  \"cash_runway_risk\": \"LOW | MEDIUM | HIGH | INSUFFICIENT_INFORMATION\",\n  \"main_risk\": \"\",\n  \"recommended_actions\": [],\n  \"additional_information_required\": []\n}\n\nCash-flow data:\n\n{{ JSON.stringify($json) }}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1648,
+        0
+      ],
+      "id": "2b6a6a50-a309-4982-ad02-6c0dadc579b6",
+      "name": "Cash Flow Risk Assessment"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        1584,
+        208
+      ],
+      "id": "dc506e4f-7471-4f46-8789-1dc7a1aa791c",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "duI5dalYzTF1LnWn",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $json.text || \"\";\n\nlet cleaned = output\n  .replace(/```json/gi, \"\")\n  .replace(/```/g, \"\")\n  .trim();\n\nlet parsed;\n\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (error) {\n  throw new Error(\n    \"Gemini returned invalid JSON. Raw output: \" + output\n  );\n}\n\nreturn [\n  {\n    json: {\n      ...$json,\n      cash_flow_risk_assessment: parsed\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        0
+      ],
+      "id": "10bb587a-fd9e-4ebb-bc48-01fed534da04",
+      "name": "Parse Cash Flow Risk"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a financial advisor for a small business.\n\nUsing the cash-flow analysis below, provide a practical and easy-to-understand financial assessment.\n\nDo not invent missing information.\nClearly identify what is calculated, what is estimated, and what is missing.\n\nReturn ONLY valid JSON:\n\n{\n  \"financial_summary\": \"\",\n  \"cash_flow_health\": \"HEALTHY | WATCH | AT_RISK | INSUFFICIENT_INFORMATION\",\n  \"key_findings\": [],\n  \"recommended_actions\": [],\n  \"priority\": \"LOW | MEDIUM | HIGH\",\n  \"information_needed\": []\n}\n\nCash-flow analysis:\n{{ JSON.stringify($json) }}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        2208,
+        0
+      ],
+      "id": "e3b971cd-89c2-4066-ad81-fdb355e42f63",
+      "name": "Generate Cash Flow Recommendation"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        2144,
+        208
+      ],
+      "id": "01c8767f-f708-45b9-ae7d-e0dc29cb384b",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "duI5dalYzTF1LnWn",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f717af3b-865e-44f7-9dca-c4e335fb28f4",
+              "name": "cash_flow_response",
+              "value": "={{ $json }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2560,
+        0
+      ],
+      "id": "c9898f20-5578-4267-b95c-4ad4b9175a49",
+      "name": "Edit Fields"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Prepare Cash Flow Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Cash Flow Input": {
+      "main": [
+        [
+          {
+            "node": "Calculate revenue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate revenue": {
+      "main": [
+        [
+          {
+            "node": "Calculate Cost of Goods Sold",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Cost of Goods Sold": {
+      "main": [
+        [
+          {
+            "node": "Calculate Gross Profit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Gross Profit": {
+      "main": [
+        [
+          {
+            "node": "Calculate Operating Expenses",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Operating Expenses": {
+      "main": [
+        [
+          {
+            "node": "Calculate Net Cash Flow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Net Cash Flow": {
+      "main": [
+        [
+          {
+            "node": "Calculate Cash Runway",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate Cash Runway": {
+      "main": [
+        [
+          {
+            "node": "Cash Flow Risk Assessment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Cash Flow Risk Assessment",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cash Flow Risk Assessment": {
+      "main": [
+        [
+          {
+            "node": "Parse Cash Flow Risk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Cash Flow Risk": {
+      "main": [
+        [
+          {
+            "node": "Generate Cash Flow Recommendation",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Generate Cash Flow Recommendation",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Cash Flow Recommendation": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "bf05a2bd-6caa-4d09-9c62-1531e2e19504",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7a95708e274691b9571e5f9b5bb25f4236d71ea39a703c7c591bc8e4819cb652"
+  },
+  "id": "ODYu6YQpCmRrNkzb",
+  "tags": []
+}
