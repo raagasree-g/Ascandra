@@ -1,0 +1,279 @@
+{
+  "name": "Master Oechestrator till Business Intake",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const input = $json.body ?? $json;\n\nconst message =\n  input.message ??\n  input.text ??\n  input.transcript ??\n  \"\";\n\nconst inputType =\n  input.input_type ??\n  input.type ??\n  \"text\";\n\nconst sessionId =\n  input.session_id ??\n  `session_${Date.now()}`;\n\nreturn [\n  {\n    json: {\n      session_id: sessionId,\n      input_type: inputType,\n      user_message: String(message).trim(),\n      received_at: new Date().toISOString()\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        0
+      ],
+      "id": "1612251d-9faa-42d4-8653-5c9717fe3e06",
+      "name": "Normalize User Input"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "4c8ccb09-b71a-4715-832e-179decd4f4bd",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "2da1406d-c7d3-4eec-ac9b-9e81add354fd",
+              "name": "message",
+              "value": "I run a small saree business. I sell each saree for ₹1000 and sell around 50 sarees per month. Each saree costs me ₹700 from my supplier. My monthly operating expenses are around ₹12000. I currently have ₹30000 cash in hand. I owe my supplier ₹20000 and they give me 30 days to pay. My customers usually pay me after 20 days.",
+              "type": "string"
+            },
+            {
+              "id": "76e6bde6-efd8-4a88-8945-c86656b2be8c",
+              "name": "input_type",
+              "value": "text",
+              "type": "string"
+            },
+            {
+              "id": "6bb221d3-f916-4578-81c6-781f36cb16c9",
+              "name": "session_id",
+              "value": "test_001",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        208,
+        0
+      ],
+      "id": "fa805eea-137d-408b-8dac-88a79b61af1e",
+      "name": "Test User Input"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are a financial information extraction assistant for a small-business financial advisory system.\n\nThe user may provide information through text or a transcript of voice input.\n\nYour job is to extract ONLY the financial and business information explicitly stated by the user.\n\nDo NOT invent, assume, estimate, or calculate missing values.\n\nUser input:\n{{ $json.user_message }}\n\nReturn ONLY valid JSON using exactly this structure:\n\n{\n  \"business_information\": {\n    \"business_type\": null,\n    \"product_or_service\": null,\n    \"business_stage\": null\n  },\n  \"financial_information\": {\n    \"monthly_revenue\": null,\n    \"monthly_sales_volume\": null,\n    \"selling_price_per_unit\": null,\n    \"purchase_cost_per_unit\": null,\n    \"monthly_cogs\": null,\n    \"monthly_operating_expenses\": null,\n    \"current_cash_balance\": null,\n    \"monthly_debt_payments\": null,\n    \"other_monthly_cash_outflows\": null\n  },\n  \"credit_information\": {\n    \"supplier_amount_owed\": null,\n    \"supplier_payment_days\": null,\n    \"customer_amount_due\": null,\n    \"customer_payment_days\": null\n  },\n  \"missing_information\": [],\n  \"confidence\": \"HIGH | MEDIUM | LOW\"\n}\n\nRules:\nData normalization rules:\n\n- Financial numeric fields must be returned as JSON numbers, NOT strings.\n- Remove currency symbols such as ₹, $, €, etc.\n- Do not include commas or currency text in numeric values.\n- If the user says \"around 50\", \"about 50\", or \"approximately 50\", return 50.\n- If the user says \"₹1,000\", return 1000.\n- If the user says \"₹50,000 per month\", return 50000.\n- Preserve the numeric meaning exactly as stated.\n- Do NOT calculate derived values.\n- For example, if selling_price_per_unit = 1000 and monthly_sales_volume = 50, do NOT calculate monthly_revenue. Leave monthly_revenue as null.\n- Use null when the user did not provide the value.\n- Use null when the user did not provide a value.\n- Preserve the currency if explicitly mentioned.\n- Do not convert currencies.\n- Do not infer monthly revenue from price and quantity.\n- Do not infer expenses.\n- Do not assume payment terms.\n- If the user says they do not know something, keep that field null and mention it in missing_information.\n- Extract information even if the user provides only one financial value.\n- The system must work with incomplete information.",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        624,
+        0
+      ],
+      "id": "935cbc72-2e3a-4e5d-a351-e2dc4d6a0fb8",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        560,
+        208
+      ],
+      "id": "50b97484-7ae1-47b4-83fe-c1081ca75aec",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "duI5dalYzTF1LnWn",
+          "name": "Google Gemini(PaLM) Api account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $json.text || \"\";\n\nlet cleaned = output.trim();\n\ncleaned = cleaned.replace(/^```json\\s*/i, \"\");\ncleaned = cleaned.replace(/^```\\s*/i, \"\");\ncleaned = cleaned.replace(/\\s*```$/i, \"\");\n\nlet parsed;\n\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (error) {\n  throw new Error(\n    \"Gemini returned invalid JSON. Raw output: \" + output\n  );\n}\n\nreturn [\n  {\n    json: {\n      ...$json,\n      extracted_financial_data: parsed\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        0
+      ],
+      "id": "1622407b-a17e-4293-91a8-127d4c3af9cb",
+      "name": "Parse Financial Information"
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $json.extracted_financial_data || {};\n\nreturn [\n  {\n    json: {\n      session_id: $json.session_id,\n      input_type: $json.input_type,\n      user_message: $json.user_message,\n\n      business_information: data.business_information || {},\n\n      financial_information: data.financial_information || {},\n\n      credit_information: data.credit_information || {},\n\n      missing_information: data.missing_information || [],\n\n      extraction_confidence: data.confidence || \"LOW\"\n    }\n  }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1168,
+        0
+      ],
+      "id": "76f03ffa-f087-4382-a33d-f6c9369456df",
+      "name": "Prepare Engine Input"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "SECn0KvkwvAmIBiK",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/SECn0KvkwvAmIBiK",
+          "cachedResultName": "Business Intake"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "user_message": "={{ $(\"Normalize User Input\").item.json.user_message }}",
+            "session_id ": "={{ $(\"Normalize User Input\").item.json.session_id }}",
+            "input_type": "={{ $(\"Normalize User Input\").item.json.input_type }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "user_message",
+              "displayName": "user_message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "session_id ",
+              "displayName": "session_id ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            },
+            {
+              "id": "input_type",
+              "displayName": "input_type",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "canBeUsedToMatch": true,
+              "type": "string",
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.3,
+      "position": [
+        1376,
+        0
+      ],
+      "id": "e2ed9e75-20b8-47ef-9fcc-7de7440d005c",
+      "name": "Call 'Business Intake'"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Test User Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Test User Input": {
+      "main": [
+        [
+          {
+            "node": "Normalize User Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize User Input": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Parse Financial Information",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Financial Information": {
+      "main": [
+        [
+          {
+            "node": "Prepare Engine Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Engine Input": {
+      "main": [
+        [
+          {
+            "node": "Call 'Business Intake'",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "980a4c7f-4812-429a-99d9-f725aaea31e2",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7a95708e274691b9571e5f9b5bb25f4236d71ea39a703c7c591bc8e4819cb652"
+  },
+  "id": "3xoNOWdNDbb3u02G",
+  "tags": []
+}
