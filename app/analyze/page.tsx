@@ -9,129 +9,133 @@ import LanguageSelector from "@/components/input/LanguageSelector";
 export default function AnalyzePage() {
   const router = useRouter();
 
-  const [businessType, setBusinessType] = useState("");
-  const [products, setProducts] = useState("");
-  const [purchaseCost, setPurchaseCost] = useState("");
-  const [sellingPrice, setSellingPrice] = useState("");
-  const [salesVolume, setSalesVolume] = useState("");
-  const [supplierDays, setSupplierDays] = useState("");
-  const [customerDays, setCustomerDays] = useState("");
-  const [monthlyExpenses, setMonthlyExpenses] =
-    useState("");
-  const [cashBalance, setCashBalance] =
-    useState("");
-  const [supplierOwed, setSupplierOwed] =
-    useState("");
-  const [customerDue, setCustomerDue] =
-    useState("");
+  // =========================================================
+  // STATE
+  // =========================================================
+
+  const [language, setLanguage] = useState("English");
 
   const [message, setMessage] = useState("");
 
-  const [language, setLanguage] =
-    useState("en");
+  const [businessType, setBusinessType] = useState("");
+  const [products, setProducts] = useState("");
 
-  const [loading, setLoading] =
-    useState(false);
+  const [purchaseCost, setPurchaseCost] = useState("");
+  const [sellingPrice, setSellingPrice] = useState("");
+  const [salesVolume, setSalesVolume] = useState("");
+  const [monthlyExpenses, setMonthlyExpenses] = useState("");
+  const [cashBalance, setCashBalance] = useState("");
 
-  const [error, setError] =
-    useState("");
+  const [supplierOwed, setSupplierOwed] = useState("");
+  const [supplierDays, setSupplierDays] = useState("");
+  const [customerDue, setCustomerDue] = useState("");
+  const [customerDays, setCustomerDays] = useState("");
 
-  function handleVoiceTranscript(
-    transcript: string,
-  ) {
-    setMessage((previous) =>
-      previous
-        ? `${previous} ${transcript}`
-        : transcript,
-    );
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  // =========================================================
+  // VOICE INPUT
+  // =========================================================
+
+  function handleVoiceTranscript(transcript: string) {
+    setMessage((current) => {
+      if (!current.trim()) {
+        return transcript;
+      }
+
+      return `${current.trim()} ${transcript}`;
+    });
   }
 
-  async function handleSubmit(
-    event: FormEvent<HTMLFormElement>,
-  ) {
+  // =========================================================
+  // SUBMIT
+  // IMPORTANT:
+  // KEEP THIS PAYLOAD COMPATIBLE WITH YOUR WORKING BACKEND
+  // =========================================================
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    setError("");
+    if (loading) {
+      return;
+    }
+
     setLoading(true);
+    setError("");
 
     const payload = {
-      session_id: `session_${Date.now()}`,
-
-      input_type: "text",
+      language,
 
       user_message: message,
 
-      response_language: language,
-
       business_information: {
         business_type: businessType,
-        products,
+        products_services: products,
       },
 
       financial_information: {
         purchase_cost_per_unit:
-          Number(purchaseCost) || 0,
+          purchaseCost === "" ? null : Number(purchaseCost),
 
         selling_price_per_unit:
-          Number(sellingPrice) || 0,
+          sellingPrice === "" ? null : Number(sellingPrice),
 
         sales_volume:
-          Number(salesVolume) || 0,
+          salesVolume === "" ? null : Number(salesVolume),
 
         monthly_operating_expenses:
-          Number(monthlyExpenses) || 0,
+          monthlyExpenses === "" ? null : Number(monthlyExpenses),
 
         current_cash_balance:
-          Number(cashBalance) || 0,
+          cashBalance === "" ? null : Number(cashBalance),
       },
 
       credit_information: {
         supplier_amount_owed:
-          Number(supplierOwed) || 0,
+          supplierOwed === "" ? null : Number(supplierOwed),
 
         supplier_payment_days:
-          Number(supplierDays) || 0,
+          supplierDays === "" ? null : Number(supplierDays),
 
         customer_amount_due:
-          Number(customerDue) || 0,
+          customerDue === "" ? null : Number(customerDue),
 
         customer_payment_days:
-          Number(customerDays) || 0,
+          customerDays === "" ? null : Number(customerDays),
       },
     };
 
     try {
-      const response = await fetch(
-        "/api/analyze",
-        {
-          method: "POST",
-
-          headers: {
-            "Content-Type":
-              "application/json",
-          },
-
-          body: JSON.stringify(payload),
+      const response = await fetch("/api/analyze", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify(payload),
+      });
 
-      const data =
-        await response.json();
+      const data = await response.json();
 
       if (!response.ok) {
         throw new Error(
-          data.error ||
-            "Analysis failed",
+          data?.error ||
+            data?.details ||
+            "Unable to analyze the business.",
         );
       }
 
+      // Store the exact backend response for /results
       sessionStorage.setItem(
         "ascandra-analysis",
         JSON.stringify(data),
       );
 
+      // Keep the existing working navigation
       router.push("/results");
     } catch (err) {
+      console.error("Analysis error:", err);
+
       setError(
         err instanceof Error
           ? err.message
@@ -142,325 +146,650 @@ export default function AnalyzePage() {
     }
   }
 
+  // =========================================================
+  // UI
+  // =========================================================
+
   return (
-    <main className="form-page">
-      <div className="form-container">
+    <main className="analyze-page">
+      <div className="analyze-shell">
 
-        <div className="form-header">
-          <h1>
-            Analyze your business
-          </h1>
+        {/* TOP BAR */}
+        <header className="analyze-topbar">
+          <div className="analyze-brand">
+            <span className="brand-mark-dot" />
+            <span>Ascandra</span>
+          </div>
 
-          <p>
-            Provide your business
-            information using structured
-            fields or simply tell Ascandra
-            what is happening.
-          </p>
-        </div>
-
-        <form
-          className="form-card"
-          onSubmit={handleSubmit}
-        >
-
-          {error && (
-            <div className="error">
-              {error}
-            </div>
-          )}
-
-          {/* LANGUAGE */}
-
-          <div className="field">
-            <label>
-              Response Language
-            </label>
+          <div className="language-mini">
+            <span>Language</span>
 
             <LanguageSelector
               value={language}
               onChange={setLanguage}
             />
           </div>
+        </header>
 
-          {/* TEXT INPUT */}
+        {/* HERO */}
+        <section className="analyze-hero">
+          <div className="hero-copy">
+            <span className="section-kicker">
+              BUSINESS INTELLIGENCE
+            </span>
 
-          <div className="field">
-            <label>
-              Tell Ascandra
-            </label>
+            <h1>
+              Let&apos;s understand
+              <br />
+              <em>your business.</em>
+            </h1>
 
-            <textarea
-              value={message}
-              onChange={(e) =>
-                setMessage(
-                  e.target.value,
-                )
-              }
-              placeholder="Example: I run a small saree business and my customers are taking too long to pay..."
-              rows={5}
-            />
-
-            <p className="input-hint">
-              Press Enter to send ·
-              Shift + Enter for a new line
+            <p>
+              Tell Ascandra what is happening in your
+              business. You can speak naturally or add
+              the numbers you know.
             </p>
           </div>
 
-          {/* VOICE INPUT */}
+          <div className="hero-decoration">
+            <div className="hero-orbit orbit-one" />
+            <div className="hero-orbit orbit-two" />
 
-          <VoiceInput
-            onTranscript={
-              handleVoiceTranscript
-            }
-            language={language}
-            disabled={loading}
-          />
+            <div className="hero-center">
+              <span>✦</span>
+            </div>
+          </div>
+        </section>
 
-          {/* BUSINESS INFORMATION */}
+        <form
+          className="analyze-form"
+          onSubmit={handleSubmit}
+        >
 
-          <h2>
-            Business Information
-          </h2>
+          {/* ERROR */}
+          {error && (
+            <div className="analyze-error">
+              <span>!</span>
 
-          <div className="field">
-            <label>
-              Business type
-            </label>
+              <p>{error}</p>
+            </div>
+          )}
 
-            <input
-              value={businessType}
-              onChange={(e) =>
-                setBusinessType(
-                  e.target.value,
-                )
-              }
-              placeholder="Example: Saree business"
-              required
-            />
+          {/* =================================================
+              NATURAL LANGUAGE
+          ================================================= */}
+
+          <section className="story-card">
+
+            <div className="story-card-heading">
+
+              <div className="heading-icon peach-icon">
+                ✦
+              </div>
+
+              <div>
+                <span className="section-kicker">
+                  START HERE
+                </span>
+
+                <h2>
+                  Tell Ascandra what&apos;s happening
+                </h2>
+              </div>
+
+            </div>
+
+            <p className="section-description">
+              You don&apos;t need to know all the numbers.
+              Just explain your situation in your own
+              words.
+            </p>
+
+            <div className="story-input-wrapper">
+
+              <textarea
+                value={message}
+                onChange={(event) =>
+                  setMessage(event.target.value)
+                }
+                placeholder="For example: I run a small saree business. Sales are okay, but customers are taking too long to pay me..."
+                rows={6}
+                disabled={loading}
+              />
+
+              <div className="story-input-footer">
+
+                <span>
+                  You can write naturally — no accounting
+                  language needed.
+                </span>
+
+                <VoiceInput
+                  language={language}
+                  onTranscript={handleVoiceTranscript}
+                  disabled={loading}
+                />
+
+              </div>
+            </div>
+
+          </section>
+
+          {/* DIVIDER */}
+
+          <div className="or-divider">
+            <span>OR ADD DETAILS BELOW</span>
           </div>
 
-          <div className="field">
-            <label>
-              Products / services
-            </label>
+          {/* =================================================
+              BUSINESS INFORMATION
+          ================================================= */}
 
-            <input
-              value={products}
-              onChange={(e) =>
-                setProducts(
-                  e.target.value,
-                )
-              }
-              placeholder="Example: Sarees"
-              required
-            />
-          </div>
+          <section className="form-section-card">
 
-          {/* FINANCIAL INFORMATION */}
+            <div className="form-section-header">
 
-          <h2>
-            Financial Information
-          </h2>
+              <div className="section-number">
+                01
+              </div>
 
-          <div className="form-grid">
+              <div>
+                <span className="section-kicker">
+                  YOUR BUSINESS
+                </span>
 
-            <div className="field">
-              <label>
-                Purchase cost per unit (₹)
-              </label>
+                <h2>
+                  Tell us a little about it
+                </h2>
 
-              <input
-                type="number"
-                min="0"
-                value={purchaseCost}
-                onChange={(e) =>
-                  setPurchaseCost(
-                    e.target.value,
-                  )
-                }
-              />
+                <p>
+                  These details help Ascandra understand
+                  what you actually sell.
+                </p>
+              </div>
+
             </div>
 
-            <div className="field">
-              <label>
-                Selling price per unit (₹)
-              </label>
+            <div className="fields-grid">
 
-              <input
-                type="number"
-                min="0"
-                value={sellingPrice}
-                onChange={(e) =>
-                  setSellingPrice(
-                    e.target.value,
-                  )
-                }
-              />
+              <div className="modern-field">
+
+                <label htmlFor="business-type">
+                  What kind of business do you run?
+                </label>
+
+                <input
+                  id="business-type"
+                  type="text"
+                  value={businessType}
+                  onChange={(event) =>
+                    setBusinessType(event.target.value)
+                  }
+                  placeholder="e.g. Saree business"
+                  disabled={loading}
+                />
+
+              </div>
+
+              <div className="modern-field">
+
+                <label htmlFor="products">
+                  What do you sell or provide?
+                </label>
+
+                <input
+                  id="products"
+                  type="text"
+                  value={products}
+                  onChange={(event) =>
+                    setProducts(event.target.value)
+                  }
+                  placeholder="e.g. Handloom sarees"
+                  disabled={loading}
+                />
+
+              </div>
+
             </div>
 
-            <div className="field">
-              <label>
-                Monthly sales volume
-              </label>
+          </section>
 
-              <input
-                type="number"
-                min="0"
-                value={salesVolume}
-                onChange={(e) =>
-                  setSalesVolume(
-                    e.target.value,
-                  )
-                }
-              />
+          {/* =================================================
+              FINANCIAL INFORMATION
+          ================================================= */}
+
+          <section className="form-section-card">
+
+            <div className="form-section-header">
+
+              <div className="section-number">
+                02
+              </div>
+
+              <div>
+                <span className="section-kicker">
+                  MONEY
+                </span>
+
+                <h2>
+                  How is the money moving?
+                </h2>
+
+                <p>
+                  Don&apos;t worry if you don&apos;t know every
+                  number. Fill in what you know.
+                </p>
+              </div>
+
             </div>
 
-            <div className="field">
-              <label>
-                Monthly operating expenses (₹)
-              </label>
+            <div className="fields-grid">
 
-              <input
-                type="number"
-                min="0"
-                value={monthlyExpenses}
-                onChange={(e) =>
-                  setMonthlyExpenses(
-                    e.target.value,
-                  )
-                }
-              />
+              {/* PURCHASE COST */}
+
+              <div className="modern-field">
+
+                <label htmlFor="purchase-cost">
+                  Cost to make / buy one
+                </label>
+
+                <div className="input-with-prefix">
+
+                  <span>₹</span>
+
+                  <input
+                    id="purchase-cost"
+                    type="number"
+                    min="0"
+                    value={purchaseCost}
+                    onChange={(event) =>
+                      setPurchaseCost(
+                        event.target.value,
+                      )
+                    }
+                    placeholder="700"
+                    disabled={loading}
+                  />
+
+                </div>
+
+                <small>
+                  What one unit costs you
+                </small>
+
+              </div>
+
+              {/* SELLING PRICE */}
+
+              <div className="modern-field">
+
+                <label htmlFor="selling-price">
+                  Selling price per unit
+                </label>
+
+                <div className="input-with-prefix">
+
+                  <span>₹</span>
+
+                  <input
+                    id="selling-price"
+                    type="number"
+                    min="0"
+                    value={sellingPrice}
+                    onChange={(event) =>
+                      setSellingPrice(
+                        event.target.value,
+                      )
+                    }
+                    placeholder="1000"
+                    disabled={loading}
+                  />
+
+                </div>
+
+                <small>
+                  What your customer pays
+                </small>
+
+              </div>
+
+              {/* SALES VOLUME */}
+
+              <div className="modern-field">
+
+                <label htmlFor="sales-volume">
+                  Units sold each month
+                </label>
+
+                <input
+                  id="sales-volume"
+                  type="number"
+                  min="0"
+                  value={salesVolume}
+                  onChange={(event) =>
+                    setSalesVolume(
+                      event.target.value,
+                    )
+                  }
+                  placeholder="50"
+                  disabled={loading}
+                />
+
+                <small>
+                  An approximate number is fine
+                </small>
+
+              </div>
+
+              {/* MONTHLY EXPENSES */}
+
+              <div className="modern-field">
+
+                <label htmlFor="monthly-expenses">
+                  Monthly business expenses
+                </label>
+
+                <div className="input-with-prefix">
+
+                  <span>₹</span>
+
+                  <input
+                    id="monthly-expenses"
+                    type="number"
+                    min="0"
+                    value={monthlyExpenses}
+                    onChange={(event) =>
+                      setMonthlyExpenses(
+                        event.target.value,
+                      )
+                    }
+                    placeholder="15000"
+                    disabled={loading}
+                  />
+
+                </div>
+
+                <small>
+                  Rent, salaries, transport, etc.
+                </small>
+
+              </div>
+
+              {/* CASH BALANCE */}
+
+              <div className="modern-field field-full">
+
+                <label htmlFor="cash-balance">
+                  Money currently available for the business
+                </label>
+
+                <div className="input-with-prefix">
+
+                  <span>₹</span>
+
+                  <input
+                    id="cash-balance"
+                    type="number"
+                    min="0"
+                    value={cashBalance}
+                    onChange={(event) =>
+                      setCashBalance(
+                        event.target.value,
+                      )
+                    }
+                    placeholder="25000"
+                    disabled={loading}
+                  />
+
+                </div>
+
+              </div>
+
             </div>
 
-            <div className="field">
-              <label>
-                Current cash balance (₹)
-              </label>
+          </section>
 
-              <input
-                type="number"
-                min="0"
-                value={cashBalance}
-                onChange={(e) =>
-                  setCashBalance(
-                    e.target.value,
-                  )
-                }
-              />
+          {/* =================================================
+              CREDIT INFORMATION
+          ================================================= */}
+
+          <section className="form-section-card">
+
+            <div className="form-section-header">
+
+              <div className="section-number">
+                03
+              </div>
+
+              <div>
+                <span className="section-kicker">
+                  PAYMENTS
+                </span>
+
+                <h2>
+                  Who owes whom?
+                </h2>
+
+                <p>
+                  This helps us understand your cash-flow
+                  pressure.
+                </p>
+              </div>
+
             </div>
 
-          </div>
+            <div className="credit-explainer">
 
-          {/* CREDIT INFORMATION */}
+              <div>
 
-          <h2>
-            Credit Information
-          </h2>
+                <span className="credit-dot customer" />
 
-          <div className="form-grid">
+                <div>
+                  <strong>
+                    Customers owe you
+                  </strong>
 
-            <div className="field">
-              <label>
-                Supplier amount owed (₹)
-              </label>
+                  <span>
+                    Money you are waiting to receive
+                  </span>
+                </div>
 
-              <input
-                type="number"
-                min="0"
-                value={supplierOwed}
-                onChange={(e) =>
-                  setSupplierOwed(
-                    e.target.value,
-                  )
-                }
-              />
+              </div>
+
+              <div>
+
+                <span className="credit-dot supplier" />
+
+                <div>
+                  <strong>
+                    You owe suppliers
+                  </strong>
+
+                  <span>
+                    Money your business needs to pay
+                  </span>
+                </div>
+
+              </div>
+
             </div>
 
-            <div className="field">
-              <label>
-                Supplier payment period (days)
-              </label>
+            <div className="fields-grid">
 
-              <input
-                type="number"
-                min="0"
-                value={supplierDays}
-                onChange={(e) =>
-                  setSupplierDays(
-                    e.target.value,
-                  )
-                }
-              />
+              {/* CUSTOMER DUE */}
+
+              <div className="modern-field">
+
+                <label htmlFor="customer-due">
+                  Customers owe you
+                </label>
+
+                <div className="input-with-prefix">
+
+                  <span>₹</span>
+
+                  <input
+                    id="customer-due"
+                    type="number"
+                    min="0"
+                    value={customerDue}
+                    onChange={(event) =>
+                      setCustomerDue(
+                        event.target.value,
+                      )
+                    }
+                    placeholder="25000"
+                    disabled={loading}
+                  />
+
+                </div>
+
+              </div>
+
+              {/* CUSTOMER DAYS */}
+
+              <div className="modern-field">
+
+                <label htmlFor="customer-days">
+                  Customers usually pay in
+                </label>
+
+                <div className="input-with-suffix">
+
+                  <input
+                    id="customer-days"
+                    type="number"
+                    min="0"
+                    value={customerDays}
+                    onChange={(event) =>
+                      setCustomerDays(
+                        event.target.value,
+                      )
+                    }
+                    placeholder="30"
+                    disabled={loading}
+                  />
+
+                  <span>days</span>
+
+                </div>
+
+              </div>
+
+              {/* SUPPLIER OWED */}
+
+              <div className="modern-field">
+
+                <label htmlFor="supplier-owed">
+                  You owe suppliers
+                </label>
+
+                <div className="input-with-prefix">
+
+                  <span>₹</span>
+
+                  <input
+                    id="supplier-owed"
+                    type="number"
+                    min="0"
+                    value={supplierOwed}
+                    onChange={(event) =>
+                      setSupplierOwed(
+                        event.target.value,
+                      )
+                    }
+                    placeholder="35000"
+                    disabled={loading}
+                  />
+
+                </div>
+
+              </div>
+
+              {/* SUPPLIER DAYS */}
+
+              <div className="modern-field">
+
+                <label htmlFor="supplier-days">
+                  You usually pay suppliers in
+                </label>
+
+                <div className="input-with-suffix">
+
+                  <input
+                    id="supplier-days"
+                    type="number"
+                    min="0"
+                    value={supplierDays}
+                    onChange={(event) =>
+                      setSupplierDays(
+                        event.target.value,
+                      )
+                    }
+                    placeholder="30"
+                    disabled={loading}
+                  />
+
+                  <span>days</span>
+
+                </div>
+
+              </div>
+
             </div>
 
-            <div className="field">
-              <label>
-                Customer amount due (₹)
-              </label>
+          </section>
 
-              <input
-                type="number"
-                min="0"
-                value={customerDue}
-                onChange={(e) =>
-                  setCustomerDue(
-                    e.target.value,
-                  )
-                }
-              />
+          {/* =================================================
+              SUBMIT
+          ================================================= */}
+
+          <section className="analyze-submit-card">
+
+            <div>
+
+              <span className="section-kicker">
+                READY?
+              </span>
+
+              <h2>
+                Let&apos;s make sense of it.
+              </h2>
+
+              <p>
+                Ascandra will look at what you&apos;ve shared
+                and highlight the decisions that matter
+                most.
+              </p>
+
             </div>
 
-            <div className="field">
-              <label>
-                Customer payment period (days)
-              </label>
+            <button
+              className="analyze-submit-button"
+              type="submit"
+              disabled={loading}
+            >
 
-              <input
-                type="number"
-                min="0"
-                value={customerDays}
-                onChange={(e) =>
-                  setCustomerDays(
-                    e.target.value,
-                  )
-                }
-              />
-            </div>
+              <span>
+                {loading
+                  ? "Analyzing your business..."
+                  : "Understand my business"}
+              </span>
 
-          </div>
+              {!loading && (
+                <span className="submit-arrow">
+                  →
+                </span>
+              )}
 
-          {/* ADDITIONAL MESSAGE */}
+            </button>
 
-          <div className="field">
-            <label>
-              Tell Ascandra anything else
-              about your business
-            </label>
+          </section>
 
-            <textarea
-              value={message}
-              onChange={(e) =>
-                setMessage(
-                  e.target.value,
-                )
-              }
-              placeholder="Example: I run a small saree business. I sell each saree for ₹1,000..."
-              rows={5}
-            />
-          </div>
-
-          {/* SUBMIT */}
-
-          <button
-            className="submit-button"
-            type="submit"
-            disabled={loading}
-          >
-            {loading
-              ? "Analyzing business..."
-              : "Analyze Business"}
-          </button>
+          <p className="privacy-note">
+            Your information is used to generate your
+            business analysis.
+          </p>
 
         </form>
       </div>

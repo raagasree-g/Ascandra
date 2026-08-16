@@ -1,61 +1,143 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-type AnalysisData = Record<string, any>;
+type AnyObject = Record<string, any>;
+
+function asObject(value: unknown): AnyObject {
+  return value && typeof value === "object"
+    ? (value as AnyObject)
+    : {};
+}
+
+function asText(value: unknown, fallback = "") {
+  if (value === null || value === undefined) return fallback;
+
+  if (typeof value === "string") return value;
+
+  if (typeof value === "number") {
+    return value.toLocaleString("en-IN");
+  }
+
+  return String(value);
+}
+
+function getRiskClass(value: string) {
+  const normalized = value.toLowerCase();
+
+  if (
+    normalized.includes("high") ||
+    normalized.includes("critical")
+  ) {
+    return "status-danger";
+  }
+
+  if (
+    normalized.includes("medium") ||
+    normalized.includes("watch") ||
+    normalized.includes("attention")
+  ) {
+    return "status-warning";
+  }
+
+  if (
+    normalized.includes("low") ||
+    normalized.includes("healthy") ||
+    normalized.includes("good")
+  ) {
+    return "status-success";
+  }
+
+  return "status-neutral";
+}
+
+function formatCurrency(value: unknown) {
+  if (
+    value === null ||
+    value === undefined ||
+    value === ""
+  ) {
+    return null;
+  }
+
+  const number = Number(value);
+
+  if (Number.isNaN(number)) {
+    return asText(value);
+  }
+
+  return `₹${number.toLocaleString("en-IN")}`;
+}
 
 export default function ResultsPage() {
-  const [data, setData] = useState<AnalysisData | null>(null);
+  const [data, setData] = useState<AnyObject | null>(null);
+  const [showRaw, setShowRaw] = useState(false);
 
   useEffect(() => {
-    const stored = sessionStorage.getItem(
-      "ascandra-analysis",
-    );
-
-    console.log(
-      "RESULTS PAGE DATA:",
-      stored,
-    );
+    const stored =
+      sessionStorage.getItem("ascandra-analysis");
 
     if (!stored) {
+      setData(null);
       return;
     }
 
     try {
-      const parsed = JSON.parse(stored);
-
-      console.log(
-        "PARSED RESULTS:",
-        parsed,
-      );
-
-      setData(parsed);
-    } catch (error) {
-      console.error(
-        "Failed to parse analysis:",
-        error,
-      );
+      setData(JSON.parse(stored));
+    } catch {
+      setData(null);
     }
   }, []);
 
-  // --------------------------------------------------
-  // NO ANALYSIS DATA
-  // --------------------------------------------------
+  const sections = useMemo(() => {
+    if (!data) {
+      return {
+        financialDecision: {},
+        creditRisk: {},
+        cashFlow: {},
+        businessIntake: {},
+      };
+    }
+
+    return {
+      financialDecision:
+        asObject(
+          data.financial_decision_response,
+        ).decision
+          ? asObject(
+              data.financial_decision_response,
+            )
+          : asObject(data.financial_decision),
+
+      creditRisk:
+        asObject(data.credit_tracker).overall_credit_risk
+          ? asObject(data.credit_tracker)
+          : asObject(data.credit_risk),
+
+      cashFlow:
+        asObject(data.cash_flow).cash_flow_status
+          ? asObject(data.cash_flow)
+          : asObject(data.cash_flow_analysis),
+
+      businessIntake: asObject(
+        data.business_intake,
+      ),
+    };
+  }, [data]);
 
   if (!data) {
     return (
-      <main className="loading">
-        <div>
-          <h1>
-            Business Decision Dashboard
-          </h1>
+      <main className="results-page">
+        <div className="empty-results">
+          <div className="empty-icon">✦</div>
+
+          <h1>No analysis found</h1>
 
           <p>
-            No analysis data found.
+            Start a new business analysis to see
+            Ascandra's recommendations here.
           </p>
-
-          <br />
 
           <Link
             href="/analyze"
@@ -68,304 +150,532 @@ export default function ResultsPage() {
     );
   }
 
-  // --------------------------------------------------
-  // EXTRACT N8N DATA
-  // --------------------------------------------------
+  const {
+    financialDecision,
+    creditRisk,
+    cashFlow,
+    businessIntake,
+  } = sections;
 
-  const businessIntake =
-    data.business_intake || {};
+const recommendedActions = Array.isArray(
+  financialDecision.recommended_actions
+)
+  ? financialDecision.recommended_actions
+  : [];
 
-  const creditTracker =
-    data.credit_tracker || {};
+const decision =
+  financialDecision.decision ||
+  recommendedActions[0] ||
+  financialDecision.primary_issue ||
+  financialDecision.financial_status ||
+  "Analysis completed";
 
-  const cashFlow =
-    data.cash_flow || {};
-
-  const financialDecisionContainer =
-    data.financial_decision || {};
-
-  const financialDecision =
-    financialDecisionContainer
-      .financial_decision_response ||
-    financialDecisionContainer ||
-    {};
-
-  // --------------------------------------------------
-  // DECISION
-  // --------------------------------------------------
-
-  const decision =
-    financialDecision.decision ||
-    financialDecision.primary_issue ||
-    financialDecision.financial_status ||
-    "Analysis completed";
-
-  // --------------------------------------------------
-  // CREDIT RISK
-  // --------------------------------------------------
-
-  const creditRisk =
-    creditTracker.overall_credit_risk ||
-    creditTracker.main_risk ||
-    "Not available";
-
-  // --------------------------------------------------
-  // CASH FLOW
-  // --------------------------------------------------
-
-  const cashFlowStatus =
-    cashFlow.cash_flow_status ||
-    cashFlow.cash_flow_risk ||
-    "Analyzed";
-
-  // --------------------------------------------------
-  // FINANCIAL REASONING
-  // --------------------------------------------------
-
-  const financialReasoning =
+  const decisionReason =
     financialDecision.reasoning ||
     financialDecision.primary_issue ||
     financialDecision.decision ||
-    "No detailed financial decision was returned.";
+    "Ascandra completed the analysis.";
 
-  // --------------------------------------------------
-  // RECOMMENDED ACTIONS
-  // --------------------------------------------------
+  const risk =
+    creditRisk.overall_credit_risk ||
+    creditRisk.main_risk ||
+    "Not available";
 
-  const recommendedActions =
-    Array.isArray(
-      financialDecision.recommended_actions,
-    )
-      ? financialDecision.recommended_actions
-      : [];
+  const riskReason =
+    creditRisk.main_risk ||
+    creditRisk.reasoning ||
+    "No detailed credit-risk explanation was returned.";
 
-  // --------------------------------------------------
-  // ADDITIONAL INFORMATION
-  // --------------------------------------------------
+  const cashStatus =
+    cashFlow.cash_flow_status ||
+    cashFlow.cash_flow_risk ||
+    cashFlow.status ||
+    "Analyzed";
 
-  const additionalInformation =
-    Array.isArray(
-      creditTracker.additional_information_required,
-    )
-      ? creditTracker.additional_information_required
-      : [];
+  const actions = Array.isArray(
+    financialDecision.recommended_actions,
+  )
+    ? financialDecision.recommended_actions
+    : [];
 
-  // --------------------------------------------------
-  // PAGE
-  // --------------------------------------------------
+  const additionalInfo = Array.isArray(
+    creditRisk.additional_information_required,
+  )
+    ? creditRisk.additional_information_required
+    : [];
+
+  const businessType =
+    businessIntake.business_type ||
+    businessIntake.businessType ||
+    "";
+
+  const products =
+    businessIntake.products ||
+    businessIntake.product_services ||
+    "";
+
+  const monthlyRevenue =
+    financialDecision.monthly_revenue ||
+    cashFlow.monthly_revenue;
+
+  const currentCash =
+    cashFlow.current_cash_balance ??
+    financialDecision.current_cash_balance;
+
+  const customerDue =
+    creditRisk.customer_amount_due ??
+    financialDecision.customer_amount_due;
 
   return (
     <main className="results-page">
-      <div className="results-container">
+      <div className="results-shell">
 
         {/* HEADER */}
 
-        <div className="results-header">
+        <header className="results-topbar">
+          <Link
+            href="/analyze"
+            className="back-link"
+          >
+            ← New analysis
+          </Link>
 
-          <h1>
-            Business Decision Dashboard
-          </h1>
+          <div className="brand-mark">
+            <span className="brand-dot" />
+            <span>Ascandra</span>
+          </div>
+        </header>
 
-          <p>
-            Ascandra has analyzed the
-            information provided for your
-            business.
+        <section className="results-hero">
+          <div>
+            <p className="eyebrow">
+              BUSINESS DECISION REPORT
+            </p>
+
+            <h1>
+              Your business,
+              <br />
+              understood.
+            </h1>
+
+            <p className="hero-description">
+              Ascandra reviewed the information you
+              provided and identified the most important
+              things to act on.
+            </p>
+          </div>
+
+          <div className="hero-badge">
+            <span>✓</span>
+            Analysis complete
+          </div>
+        </section>
+
+        {/* TOP STATUS CARDS */}
+
+        <section className="status-grid">
+
+          <div className="status-card decision-card">
+            <div className="status-card-top">
+              <span className="status-icon">◆</span>
+              <span className="status-label">
+                Decision
+              </span>
+            </div>
+
+            <strong>
+              {asText(decision)}
+            </strong>
+
+            <p>
+              What Ascandra thinks you should
+              focus on first.
+            </p>
+          </div>
+
+          <div className="status-card">
+            <div className="status-card-top">
+              <span className="status-icon">
+                ◐
+              </span>
+
+              <span className="status-label">
+                Credit risk
+              </span>
+            </div>
+
+            <strong
+              className={getRiskClass(
+                asText(risk),
+              )}
+            >
+              {asText(risk)}
+            </strong>
+
+            <p>
+              Based on the payment and credit
+              information provided.
+            </p>
+          </div>
+
+          <div className="status-card">
+            <div className="status-card-top">
+              <span className="status-icon">
+                ◔
+              </span>
+
+              <span className="status-label">
+                Cash flow
+              </span>
+            </div>
+
+            <strong
+              className={getRiskClass(
+                asText(cashStatus),
+              )}
+            >
+              {asText(cashStatus)}
+            </strong>
+
+            <p>
+              How your incoming and outgoing
+              money currently looks.
+            </p>
+          </div>
+
+        </section>
+
+        {/* MAIN DECISION */}
+
+        <section className="decision-panel">
+
+          <div className="decision-panel-header">
+            <div>
+              <span className="section-kicker">
+                MOST IMPORTANT
+              </span>
+
+              <h2>
+                What should you do?
+              </h2>
+            </div>
+
+            <div className="decision-badge">
+              {asText(
+                financialDecision.financial_status ||
+                  financialDecision.priority ||
+                  "ACTION",
+              )}
+            </div>
+          </div>
+
+          <p className="decision-main">
+            {asText(decision)}
           </p>
 
-        </div>
+          <div className="decision-explanation">
+            <span>Why this matters</span>
 
-        {/* METRICS */}
-
-        <div className="dashboard-grid">
-
-          <div className="metric-card">
-
-            <div className="metric-label">
-              Decision
-            </div>
-
-            <div className="metric-value">
-              {String(decision)}
-            </div>
-
+            <p>
+              {asText(decisionReason)}
+            </p>
           </div>
-
-          <div className="metric-card">
-
-            <div className="metric-label">
-              Credit Risk
-            </div>
-
-            <div className="metric-value">
-              {String(creditRisk)}
-            </div>
-
-          </div>
-
-          <div className="metric-card">
-
-            <div className="metric-label">
-              Cash Flow
-            </div>
-
-            <div className="metric-value">
-              {String(cashFlowStatus)}
-            </div>
-
-          </div>
-
-        </div>
-
-        {/* FINANCIAL DECISION */}
-
-        <section className="result-section">
-
-          <h2>
-            Financial Decision
-          </h2>
-
-          <p>
-            {String(financialReasoning)}
-          </p>
 
         </section>
 
         {/* RECOMMENDED ACTIONS */}
 
-        <section className="result-section">
+        <section className="content-section">
 
-          <h2>
-            Recommended Actions
-          </h2>
+          <div className="section-heading">
+            <div>
+              <span className="section-kicker">
+                NEXT STEPS
+              </span>
 
-          {recommendedActions.length > 0 ? (
+              <h2>
+                What to do next
+              </h2>
+            </div>
 
-            <ul className="result-list">
+            <span className="action-count">
+              {actions.length} actions
+            </span>
+          </div>
 
-              {recommendedActions.map(
-                (
-                  action: unknown,
-                  index: number,
-                ) => (
-                  <li key={index}>
-                    {String(action)}
-                  </li>
+          {actions.length > 0 ? (
+            <div className="actions-list">
+              {actions.map(
+                (action: unknown, index: number) => (
+                  <div
+                    className="action-item"
+                    key={index}
+                  >
+                    <div className="action-number">
+                      {String(index + 1).padStart(
+                        2,
+                        "0",
+                      )}
+                    </div>
+
+                    <div className="action-content">
+                      <p>
+                        {asText(action)}
+                      </p>
+                    </div>
+
+                    <div className="action-arrow">
+                      →
+                    </div>
+                  </div>
                 ),
               )}
-
-            </ul>
-
+            </div>
           ) : (
-
-            <p>
-              No recommendations returned.
-            </p>
-
+            <div className="soft-empty">
+              No specific actions were returned.
+            </div>
           )}
 
         </section>
 
-        {/* CREDIT RISK */}
+        {/* TWO COLUMN INFORMATION */}
 
-        <section className="result-section">
+        <section className="two-column">
 
-          <h2>
-            Credit Risk
-          </h2>
+          <div className="info-card">
 
-          <p>
-            {String(
-              creditTracker.main_risk ||
-              creditTracker.reasoning ||
-              "No detailed credit-risk assessment returned.",
+            <div className="info-card-heading">
+              <span className="info-icon">
+                ◐
+              </span>
+
+              <div>
+                <span className="section-kicker">
+                  CREDIT
+                </span>
+
+                <h2>
+                  Credit risk
+                </h2>
+              </div>
+            </div>
+
+            <div
+              className={`risk-pill ${getRiskClass(
+                asText(risk),
+              )}`}
+            >
+              {asText(risk)}
+            </div>
+
+            <p className="info-description">
+              {asText(riskReason)}
+            </p>
+
+          </div>
+
+          <div className="info-card">
+
+            <div className="info-card-heading">
+              <span className="info-icon">
+                +
+              </span>
+
+              <div>
+                <span className="section-kicker">
+                  NEED MORE INFORMATION
+                </span>
+
+                <h2>
+                  What would help?
+                </h2>
+              </div>
+            </div>
+
+            {additionalInfo.length > 0 ? (
+              <ul className="clean-list">
+                {additionalInfo.map(
+                  (
+                    item: unknown,
+                    index: number,
+                  ) => (
+                    <li key={index}>
+                      <span>•</span>
+                      {asText(item)}
+                    </li>
+                  ),
+                )}
+              </ul>
+            ) : (
+              <p className="info-description">
+                No additional information was
+                requested.
+              </p>
             )}
-          </p>
+
+          </div>
 
         </section>
 
-        {/* ADDITIONAL INFORMATION */}
+        {/* BUSINESS SNAPSHOT */}
 
-        <section className="result-section">
+        {(businessType ||
+          products ||
+          monthlyRevenue ||
+          currentCash ||
+          customerDue) && (
+          <section className="snapshot-card">
 
-          <h2>
-            Additional Information Required
-          </h2>
+            <div className="snapshot-header">
+              <div>
+                <span className="section-kicker">
+                  YOUR BUSINESS
+                </span>
 
-          {additionalInformation.length > 0 ? (
+                <h2>
+                  Business snapshot
+                </h2>
+              </div>
+            </div>
 
-            <ul className="result-list">
+            <div className="snapshot-grid">
 
-              {additionalInformation.map(
-                (
-                  item: unknown,
-                  index: number,
-                ) => (
-                  <li key={index}>
-                    {String(item)}
-                  </li>
-                ),
+              {businessType && (
+                <div className="snapshot-item">
+                  <span>Business</span>
+                  <strong>
+                    {asText(businessType)}
+                  </strong>
+                </div>
               )}
 
-            </ul>
+              {products && (
+                <div className="snapshot-item">
+                  <span>Products / services</span>
+                  <strong>
+                    {asText(products)}
+                  </strong>
+                </div>
+              )}
 
-          ) : (
+              {monthlyRevenue && (
+                <div className="snapshot-item">
+                  <span>Monthly revenue</span>
+                  <strong>
+                    {formatCurrency(
+                      monthlyRevenue,
+                    ) ||
+                      asText(monthlyRevenue)}
+                  </strong>
+                </div>
+              )}
 
-            <p>
-              No additional information requested.
-            </p>
+              {currentCash !== undefined &&
+                currentCash !== null && (
+                  <div className="snapshot-item">
+                    <span>Cash available</span>
+                    <strong>
+                      {formatCurrency(
+                        currentCash,
+                      ) ||
+                        asText(currentCash)}
+                    </strong>
+                  </div>
+                )}
 
+              {customerDue !== undefined &&
+                customerDue !== null && (
+                  <div className="snapshot-item">
+                    <span>Customer payments due</span>
+                    <strong>
+                      {formatCurrency(
+                        customerDue,
+                      ) ||
+                        asText(customerDue)}
+                    </strong>
+                  </div>
+                )}
+
+            </div>
+
+          </section>
+        )}
+
+        {/* RAW DATA */}
+
+        <section className="technical-section">
+
+          <button
+            type="button"
+            className="technical-toggle"
+            onClick={() =>
+              setShowRaw((current) => !current)
+            }
+            aria-expanded={showRaw}
+          >
+            <div>
+              <span className="section-kicker">
+                FOR TRANSPARENCY
+              </span>
+
+              <strong>
+                Technical analysis
+              </strong>
+
+              <span>
+                View the detailed data returned
+                by Ascandra
+              </span>
+            </div>
+
+            <span className="toggle-arrow">
+              {showRaw ? "↑" : "↓"}
+            </span>
+          </button>
+
+          {showRaw && (
+            <pre className="json-box">
+              {JSON.stringify(
+                data,
+                null,
+                2,
+              )}
+            </pre>
           )}
 
         </section>
 
-        {/* BUSINESS INTAKE */}
+        {/* FOOTER CTA */}
 
-        {businessIntake.text && (
+        <section className="results-footer">
 
-          <section className="result-section">
-
+          <div>
             <h2>
-              Business Intake
+              Ready to look at another business?
             </h2>
 
             <p>
-              {String(
-                businessIntake.text,
-              )}
+              You can start a new analysis whenever
+              you need.
             </p>
+          </div>
 
-          </section>
-
-        )}
-
-        {/* RAW ANALYSIS */}
-
-        <section className="result-section">
-
-          <h2>
-            Raw Analysis
-          </h2>
-
-          <pre className="json-box">
-            {JSON.stringify(
-              data,
-              null,
-              2,
-            )}
-          </pre>
+          <Link
+            href="/analyze"
+            className="primary-button"
+          >
+            Analyze another business →
+          </Link>
 
         </section>
 
-        {/* BACK */}
-
-        <br />
-
-        <Link
-          href="/analyze"
-          className="secondary-button"
-        >
-          Analyze Another Business
-        </Link>
+        <footer className="results-footer-note">
+          Ascandra helps you understand your business
+          information. Use its recommendations as
+          decision support, not as a replacement for
+          professional financial advice.
+        </footer>
 
       </div>
     </main>
